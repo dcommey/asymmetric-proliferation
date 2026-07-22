@@ -8,10 +8,53 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from .model import Calibration, Outcome, compare_policies
+from .model import Calibration, Outcome, compare_policies, rank_distinct_outcomes
 
 
 EVIDENCE_DIR = Path(__file__).resolve().parent / "data"
+
+
+ROBUSTNESS_BOXES = {
+    "narrow": {
+        "lambda_defender": (0.50, 1.00),
+        "rate_ratio": (0.60, 2.20),
+        "opportunistic_misuse": (0.25, 1.10),
+        "defensive_externality": (0.25, 0.95),
+        "conversion_ratio": (0.75, 1.50),
+        "deploy_rate": (1.50, 3.50),
+        "guardrail_deterrence": (0.40, 0.78),
+        "guardrail_friction": (0.07, 0.20),
+        "irreversibility_guarded": (0.25, 0.55),
+        "controlled_tail_cost": (0.00, 0.45),
+        "prerelease_delay_cost": (0.05, 0.16),
+    },
+    "reference": {
+        "lambda_defender": (0.35, 1.20),
+        "rate_ratio": (0.30, 3.00),
+        "opportunistic_misuse": (0.10, 1.40),
+        "defensive_externality": (0.10, 1.20),
+        "conversion_ratio": (0.60, 1.80),
+        "deploy_rate": (1.00, 4.00),
+        "guardrail_deterrence": (0.30, 0.85),
+        "guardrail_friction": (0.04, 0.25),
+        "irreversibility_guarded": (0.15, 0.65),
+        "controlled_tail_cost": (0.00, 0.65),
+        "prerelease_delay_cost": (0.03, 0.20),
+    },
+    "wide": {
+        "lambda_defender": (0.20, 1.50),
+        "rate_ratio": (0.15, 4.00),
+        "opportunistic_misuse": (0.00, 1.80),
+        "defensive_externality": (0.00, 1.50),
+        "conversion_ratio": (0.40, 2.20),
+        "deploy_rate": (0.50, 5.00),
+        "guardrail_deterrence": (0.10, 0.95),
+        "guardrail_friction": (0.00, 0.35),
+        "irreversibility_guarded": (0.05, 0.90),
+        "controlled_tail_cost": (0.00, 0.90),
+        "prerelease_delay_cost": (0.00, 0.30),
+    },
+}
 
 
 def _linspace(start: float, stop: float, count: int) -> List[float]:
@@ -29,7 +72,7 @@ def phase_diagram(base: Calibration, size: int = 61) -> List[Dict[str, object]]:
                 lambda_adversary=ratio * base.lambda_defender,
                 opportunistic_misuse=misuse,
             )
-            ranked = list(compare_policies(c).values())
+            ranked = list(rank_distinct_outcomes(c))
             best, runner_up = ranked[:2]
             rows.append(
                 {
@@ -53,7 +96,7 @@ def externality_diagram(base: Calibration, size: int = 61) -> List[Dict[str, obj
                 lambda_adversary=ratio * base.lambda_defender,
                 defensive_externality=eta,
             )
-            ranked = list(compare_policies(c).values())
+            ranked = list(rank_distinct_outcomes(c))
             rows.append(
                 {
                     "adversary_defender_rate_ratio": ratio,
@@ -76,7 +119,7 @@ def cost_exchange_diagram(base: Calibration, size: int = 61) -> List[Dict[str, o
                 lambda_adversary=rate_ratio * base.lambda_defender,
                 adversary_uplift=conversion_ratio * base.defender_uplift,
             )
-            ranked = list(compare_policies(c).values())
+            ranked = list(rank_distinct_outcomes(c))
             rows.append(
                 {
                     "adversary_defender_rate_ratio": rate_ratio,
@@ -125,7 +168,9 @@ def _scale(unit_value: float, lower: float, upper: float) -> float:
     return lower + unit_value * (upper - lower)
 
 
-def robustness_scan(base: Calibration, samples: int = 2048) -> List[Dict[str, object]]:
+def robustness_scan(
+    base: Calibration, samples: int = 2048, box_name: str = "reference"
+) -> List[Dict[str, object]]:
     """Deterministic global sensitivity scan over a documented parameter box.
 
     The prime-base low-discrepancy design covers eleven uncertain inputs without
@@ -134,29 +179,33 @@ def robustness_scan(base: Calibration, samples: int = 2048) -> List[Dict[str, ob
     """
     if samples < 1:
         raise ValueError("samples must be positive")
+    if box_name not in ROBUSTNESS_BOXES:
+        raise ValueError(f"unknown robustness box: {box_name}")
+    bounds = ROBUSTNESS_BOXES[box_name]
     primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31)
     rows: List[Dict[str, object]] = []
     for sample_id in range(1, samples + 1):
         u = [_van_der_corput(sample_id, prime) for prime in primes]
-        lambda_defender = _scale(u[0], 0.35, 1.20)
-        rate_ratio = _scale(u[1], 0.30, 3.00)
-        conversion_ratio = _scale(u[4], 0.60, 1.80)
+        lambda_defender = _scale(u[0], *bounds["lambda_defender"])
+        rate_ratio = _scale(u[1], *bounds["rate_ratio"])
+        conversion_ratio = _scale(u[4], *bounds["conversion_ratio"])
         c = base.with_changes(
             lambda_defender=lambda_defender,
             lambda_adversary=rate_ratio * lambda_defender,
-            opportunistic_misuse=_scale(u[2], 0.10, 1.40),
-            defensive_externality=_scale(u[3], 0.10, 1.20),
+            opportunistic_misuse=_scale(u[2], *bounds["opportunistic_misuse"]),
+            defensive_externality=_scale(u[3], *bounds["defensive_externality"]),
             adversary_uplift=conversion_ratio * base.defender_uplift,
-            deploy_rate=_scale(u[5], 1.00, 4.00),
-            guardrail_deterrence=_scale(u[6], 0.30, 0.85),
-            guardrail_friction=_scale(u[7], 0.04, 0.25),
-            irreversibility_guarded=_scale(u[8], 0.15, 0.65),
-            controlled_tail_cost=_scale(u[9], 0.00, 0.65),
-            prerelease_delay_cost=_scale(u[10], 0.03, 0.20),
+            deploy_rate=_scale(u[5], *bounds["deploy_rate"]),
+            guardrail_deterrence=_scale(u[6], *bounds["guardrail_deterrence"]),
+            guardrail_friction=_scale(u[7], *bounds["guardrail_friction"]),
+            irreversibility_guarded=_scale(u[8], *bounds["irreversibility_guarded"]),
+            controlled_tail_cost=_scale(u[9], *bounds["controlled_tail_cost"]),
+            prerelease_delay_cost=_scale(u[10], *bounds["prerelease_delay_cost"]),
         )
-        ranked = list(compare_policies(c).values())
+        ranked = list(rank_distinct_outcomes(c))
         rows.append(
             {
+                "box": box_name,
                 "sample_id": sample_id,
                 "lambda_defender": lambda_defender,
                 "adversary_defender_rate_ratio": rate_ratio,
@@ -174,6 +223,75 @@ def robustness_scan(base: Calibration, samples: int = 2048) -> List[Dict[str, ob
                 "margin": ranked[0].welfare - ranked[1].welfare,
             }
         )
+    return rows
+
+
+def robustness_box_scan(
+    base: Calibration, samples: int = 2048
+) -> List[Dict[str, object]]:
+    """Run the same low-discrepancy design over three nested scopes."""
+    rows: List[Dict[str, object]] = []
+    for box_name in ("narrow", "reference", "wide"):
+        rows.extend(robustness_scan(base, samples=samples, box_name=box_name))
+    return rows
+
+
+def _quantile(values: List[float], probability: float) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        raise ValueError("cannot take a quantile of an empty sequence")
+    position = probability * (len(ordered) - 1)
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] * (1.0 - fraction) + ordered[upper] * fraction
+
+
+def summarize_robustness_boxes(
+    rows: Iterable[Dict[str, object]],
+) -> List[Dict[str, object]]:
+    """Summarize policy shares and winner margins within each design scope."""
+    materialized = list(rows)
+    output: List[Dict[str, object]] = []
+    for box_name in ("narrow", "reference", "wide"):
+        subset = [row for row in materialized if row["box"] == box_name]
+        margins = [float(row["margin"]) for row in subset]
+        for policy in ("controlled", "prerelease", "open_guarded", "open_minimal"):
+            count = sum(row["policy"] == policy for row in subset)
+            output.append(
+                {
+                    "box": box_name,
+                    "policy": policy,
+                    "count": count,
+                    "share": count / len(subset),
+                    "median_winner_margin": _quantile(margins, 0.50),
+                    "p10_winner_margin": _quantile(margins, 0.10),
+                }
+            )
+    return output
+
+
+def open_delay_diagram(
+    base: Calibration, size: int = 41, maximum_delay: float = 0.75
+) -> List[Dict[str, object]]:
+    """Vary artifact-to-effective-use delays after open release."""
+    rows: List[Dict[str, object]] = []
+    for adversary_delay in _linspace(0.0, maximum_delay, size):
+        for defender_delay in _linspace(0.0, maximum_delay, size):
+            c = base.with_changes(
+                open_adversary_delay=adversary_delay,
+                open_defender_delay=defender_delay,
+            )
+            ranked = list(rank_distinct_outcomes(c))
+            rows.append(
+                {
+                    "open_adversary_delay": adversary_delay,
+                    "open_defender_delay": defender_delay,
+                    "policy": ranked[0].policy,
+                    "runner_up": ranked[1].policy,
+                    "margin": ranked[0].welfare - ranked[1].welfare,
+                }
+            )
     return rows
 
 
@@ -237,6 +355,9 @@ def run(output: Path, size: int = 61) -> Dict[str, Path]:
         "summary": output / "policy_summary.csv",
         "robustness": output / "robustness_scan.csv",
         "robustness_summary": output / "robustness_summary.csv",
+        "robustness_boxes": output / "robustness_boxes.csv",
+        "robustness_box_summary": output / "robustness_box_summary.csv",
+        "open_delays": output / "open_delay_diagram.csv",
         "release_evidence": output / "release_evidence.csv",
         "cyber_evidence": output / "cyber_evidence.csv",
         "incident_evidence": output / "incident_evidence.csv",
@@ -255,6 +376,12 @@ def run(output: Path, size: int = 61) -> Dict[str, Path]:
     robustness = robustness_scan(base)
     write_csv(files["robustness"], robustness)
     write_csv(files["robustness_summary"], summarize_robustness(robustness))
+    box_rows = robustness_box_scan(base)
+    write_csv(files["robustness_boxes"], box_rows)
+    write_csv(
+        files["robustness_box_summary"], summarize_robustness_boxes(box_rows)
+    )
+    write_csv(files["open_delays"], open_delay_diagram(base))
     for name in ("release_evidence", "cyber_evidence", "incident_evidence"):
         source = EVIDENCE_DIR / f"{name}.csv"
         if not source.exists():

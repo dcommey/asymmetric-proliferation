@@ -17,9 +17,14 @@ opportunistic misuse and an irreversible proliferation cost.
 
 The analytic helpers also reproduce finite-horizon marginal empowerment, the
 capability moat, defender-window success, costly acquisition effort, and the
-closed-form proliferation-reversal threshold. A deterministic 2,048-point
-low-discrepancy design tests the policy ranking across eleven uncertain inputs,
-including tail costs for controlled systems as well as open-release irreversibility.
+closed-form proliferation-reversal threshold. The defender-first window is
+optimized continuously on a bounded interval, with its zero-length boundary
+identified with safeguarded open release. Actor-specific effective-use delays
+can separate weight access from deployable capability after open release. A
+deterministic 2,048-point low-discrepancy design tests the policy ranking across
+eleven uncertain inputs, including tail costs for controlled systems as well as
+open-release irreversibility. The same design is repeated over narrow,
+reference, and wide nested parameter scopes.
 Three source-backed CSV files document observed release pathways, UK AI
 Security Institute cyber comparisons, and the July 2026 Hugging Face incident;
 they are descriptive evidence, not model calibration targets.
@@ -37,7 +42,7 @@ python -m unittest discover -s tests -v
 ```
 
 The command writes the complete calibration, policy comparisons, global
-sensitivity design, observed-evidence tables, and nine vector PDF figures. To
+sensitivity designs, observed-evidence tables, and ten vector PDF figures. To
 write figures directly into a checked-out paper directory:
 
 ```bash

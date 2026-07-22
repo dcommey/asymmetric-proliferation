@@ -17,7 +17,7 @@ def main() -> None:
     args = parser.parse_args()
     files = run(args.output, size=args.grid_size)
     build_all(args.output)
-    print(f"Wrote {len(files)} data files and 9 vector figures to {args.output}")
+    print(f"Wrote {len(files)} data files and 10 vector figures to {args.output}")
 
 
 if __name__ == "__main__":

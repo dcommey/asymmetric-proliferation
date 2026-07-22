@@ -43,9 +43,12 @@ class Calibration:
     controlled_tail_cost: float = 0.0
     irreversibility_guarded: float = 0.38
     irreversibility_minimal: float = 0.52
-    prerelease_windows: Tuple[float, ...] = (0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00)
+    open_adversary_delay: float = 0.0
+    open_defender_delay: float = 0.0
+    prerelease_window_max: float = 2.0
     prerelease_delay_cost: float = 0.10
-    quadrature_steps: int = 160
+    window_search_points: int = 81
+    window_refinement_steps: int = 48
 
     def with_changes(self, **kwargs: float) -> "Calibration":
         return replace(self, **kwargs)
@@ -84,10 +87,17 @@ def _validate(c: Calibration) -> None:
         "controlled_tail_cost": c.controlled_tail_cost,
         "irreversibility_guarded": c.irreversibility_guarded,
         "irreversibility_minimal": c.irreversibility_minimal,
+        "open_adversary_delay": c.open_adversary_delay,
+        "open_defender_delay": c.open_defender_delay,
+        "prerelease_window_max": c.prerelease_window_max,
     }
     for name, value in nonnegative.items():
         if value < 0:
             raise ValueError(f"{name} must be nonnegative")
+    if c.window_search_points < 3:
+        raise ValueError("window_search_points must be at least 3")
+    if c.window_refinement_steps < 1:
+        raise ValueError("window_refinement_steps must be positive")
 
 
 def access_exposure(rate: float, rho: float) -> float:
@@ -229,50 +239,91 @@ def _controlled_harm(c: Calibration) -> float:
     return strategic + misuse
 
 
-def _open_outcome(c: Calibration, guarded: bool) -> Outcome:
-    policy = "open_guarded" if guarded else "open_minimal"
+def _discounted_interval(rate: float, stop: float) -> float:
+    """Integral of ``exp(-rate*t)`` from zero to ``stop``."""
+    if stop <= 0:
+        return 0.0
+    return (1.0 - exp(-rate * stop)) / rate
+
+
+def _discounted_open_strategic_harm(
+    c: Calibration, defender_gain: float
+) -> float:
+    """Strategic harm after release with deterministic effective-use delays.
+
+    Weight publication occurs at time zero.  The two delay parameters measure
+    artifact-to-effective-use time for the sophisticated actor and defender.
+    Zero delays recover the immediate-effective-access benchmark exactly.
+    """
+    delays = sorted({0.0, c.open_adversary_delay, c.open_defender_delay})
+    total = 0.0
+    for index, start in enumerate(delays):
+        stop = delays[index + 1] if index + 1 < len(delays) else None
+        adversary_has_access = start >= c.open_adversary_delay
+        defender_has_access = start >= c.open_defender_delay
+        gap = c.baseline_gap
+        if adversary_has_access:
+            gap += c.adversary_uplift
+        if defender_has_access:
+            gap -= defender_gain
+        if stop is None:
+            weight = exp(-c.rho * start) / c.rho
+        else:
+            weight = (exp(-c.rho * start) - exp(-c.rho * stop)) / c.rho
+        total += weight * _damage(gap, c)
+    return total
+
+
+def _discounted_open_harm(c: Calibration, guarded: bool) -> float:
     friction = c.guardrail_friction if guarded else 0.0
     deterrence = c.guardrail_deterrence if guarded else 0.0
-    d_gain = (1.0 - friction) * (
+    defender_gain = (1.0 - friction) * (
         c.defender_uplift + c.defensive_externality * c.defender_reach_open
     )
-    strategic = _damage(c.baseline_gap + c.adversary_uplift - d_gain, c) / c.rho
+    strategic = _discounted_open_strategic_harm(c, defender_gain)
     misuse = (1.0 - deterrence) * c.opportunistic_misuse / c.rho
-    harm = strategic + misuse
+    return strategic + misuse
+
+
+def _open_outcome(c: Calibration, guarded: bool) -> Outcome:
+    policy = "open_guarded" if guarded else "open_minimal"
+    harm = _discounted_open_harm(c, guarded)
     benefit_flow = c.benefit_open_guarded if guarded else c.benefit_open_minimal
     benefit = benefit_flow / c.rho
     irreversibility = c.irreversibility_guarded if guarded else c.irreversibility_minimal
     return Outcome(policy, benefit - harm - irreversibility, harm, benefit, irreversibility)
 
 
-def _trapezoid_prerelease_harm(c: Calibration, tau: float) -> float:
-    """Discounted harm before tau, plus the guarded-open continuation value."""
-    steps = max(20, c.quadrature_steps)
-    dt = tau / steps
+def _prerelease_harm(c: Calibration, tau: float) -> float:
+    """Exact pre-window harm plus the guarded-open continuation value."""
     pre_gain = c.defender_uplift + c.defensive_externality * c.defender_reach_prerelease
-    total = 0.0
-    for j in range(steps + 1):
-        t = j * dt
-        p_s = 1.0 - exp(-c.lambda_adversary * t)
-        p_d = 1.0 - exp(-c.deploy_rate * t)
-        strategic = _state_harm(p_s, p_d, pre_gain, c)
-        misuse = c.controlled_misuse_share * c.opportunistic_misuse
-        integrand = exp(-c.rho * t) * (strategic + misuse)
-        total += (0.5 if j in (0, steps) else 1.0) * integrand
-    pre = total * dt
-
-    friction = c.guardrail_friction
-    open_gain = (1.0 - friction) * (
-        c.defender_uplift + c.defensive_externality * c.defender_reach_open
+    h00 = _damage(c.baseline_gap, c)
+    h10 = _damage(c.baseline_gap + c.adversary_uplift, c)
+    h01 = _damage(c.baseline_gap - pre_gain, c)
+    h11 = _damage(c.baseline_gap + c.adversary_uplift - pre_gain, c)
+    pre = h11 * _discounted_interval(c.rho, tau)
+    pre += (h01 - h11) * _discounted_interval(
+        c.rho + c.lambda_adversary, tau
     )
-    post_flow = _damage(c.baseline_gap + c.adversary_uplift - open_gain, c)
-    post_flow += (1.0 - c.guardrail_deterrence) * c.opportunistic_misuse
-    post = exp(-c.rho * tau) * post_flow / c.rho
+    pre += (h10 - h11) * _discounted_interval(c.rho + c.deploy_rate, tau)
+    pre += (h00 - h10 - h01 + h11) * _discounted_interval(
+        c.rho + c.lambda_adversary + c.deploy_rate, tau
+    )
+    pre += (
+        c.controlled_misuse_share
+        * c.opportunistic_misuse
+        * _discounted_interval(c.rho, tau)
+    )
+    post = exp(-c.rho * tau) * _discounted_open_harm(c, guarded=True)
     return pre + post
 
 
-def _prerelease_outcome(c: Calibration, tau: float) -> Outcome:
-    harm = _trapezoid_prerelease_harm(c, tau)
+def prerelease_outcome(c: Calibration, tau: float) -> Outcome:
+    """Evaluate a fixed defender-first window followed by guarded release."""
+    _validate(c)
+    if not 0 <= tau <= c.prerelease_window_max:
+        raise ValueError("tau must lie in [0, prerelease_window_max]")
+    harm = _prerelease_harm(c, tau)
     # Benefits accrue during selected access, then as guarded-open benefits.
     pre_benefit = c.benefit_prerelease * (1.0 - exp(-c.rho * tau)) / c.rho
     post_benefit = exp(-c.rho * tau) * c.benefit_open_guarded / c.rho
@@ -284,6 +335,44 @@ def _prerelease_outcome(c: Calibration, tau: float) -> Outcome:
     one_time_cost = open_irreversibility + controlled_tail_cost
     welfare = benefit - harm - one_time_cost
     return Outcome("prerelease", welfare, harm, benefit, one_time_cost, tau)
+
+
+def _best_prerelease_outcome(c: Calibration) -> Outcome:
+    """Deterministically maximize window welfare on a bounded continuum.
+
+    A uniform global screen locates the best basin; golden-section refinement
+    then searches the adjacent interval.  Endpoints are always evaluated, so
+    ``tau=0`` reproduces guarded open release and the maximum allowed window is
+    not silently excluded.
+    """
+    maximum = c.prerelease_window_max
+    if maximum == 0:
+        return prerelease_outcome(c, 0.0)
+    points = c.window_search_points
+    step = maximum / (points - 1)
+    screened = [prerelease_outcome(c, index * step) for index in range(points)]
+    best_index = max(range(points), key=lambda index: screened[index].welfare)
+    if best_index in (0, points - 1):
+        return screened[best_index]
+
+    low = (best_index - 1) * step
+    high = (best_index + 1) * step
+    ratio = (5.0 ** 0.5 - 1.0) / 2.0
+    left = high - ratio * (high - low)
+    right = low + ratio * (high - low)
+    left_outcome = prerelease_outcome(c, left)
+    right_outcome = prerelease_outcome(c, right)
+    for _ in range(c.window_refinement_steps):
+        if left_outcome.welfare < right_outcome.welfare:
+            low, left, left_outcome = left, right, right_outcome
+            right = low + ratio * (high - low)
+            right_outcome = prerelease_outcome(c, right)
+        else:
+            high, right, right_outcome = right, left, left_outcome
+            left = high - ratio * (high - low)
+            left_outcome = prerelease_outcome(c, left)
+    candidates = (screened[best_index], left_outcome, right_outcome)
+    return max(candidates, key=lambda outcome: outcome.welfare)
 
 
 def evaluate_policy(c: Calibration, policy: str) -> Outcome:
@@ -298,11 +387,27 @@ def evaluate_policy(c: Calibration, policy: str) -> Outcome:
     if policy == "open_minimal":
         return _open_outcome(c, guarded=False)
     if policy == "prerelease":
-        candidates = (_prerelease_outcome(c, tau) for tau in c.prerelease_windows)
-        return max(candidates, key=lambda outcome: outcome.welfare)
+        return _best_prerelease_outcome(c)
     raise ValueError(f"unknown policy: {policy}")
 
 
 def compare_policies(c: Calibration, policies: Iterable[str] = POLICIES) -> Dict[str, Outcome]:
     outcomes = {policy: evaluate_policy(c, policy) for policy in policies}
     return dict(sorted(outcomes.items(), key=lambda item: item[1].welfare, reverse=True))
+
+
+def rank_distinct_outcomes(c: Calibration) -> Tuple[Outcome, ...]:
+    """Rank economically distinct policy outcomes.
+
+    The boundary ``P(0)`` is exactly guarded open release.  It remains
+    available through :func:`prerelease_outcome` for analytic checks, but is
+    removed from policy counts and runner-up margins when the optimized window
+    collapses to zero.
+    """
+    outcomes = {policy: evaluate_policy(c, policy) for policy in POLICIES}
+    prerelease = outcomes["prerelease"]
+    if prerelease.window is not None and prerelease.window <= 1e-10:
+        outcomes.pop("prerelease")
+    return tuple(
+        sorted(outcomes.values(), key=lambda outcome: outcome.welfare, reverse=True)
+    )

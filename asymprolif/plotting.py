@@ -162,6 +162,8 @@ def _draw_region_panel(
     yticks: Sequence[float],
     baseline: Tuple[float, float] | None = None,
     use_initials: bool = False,
+    xformat: str = "g",
+    yformat: str = ".1f",
 ) -> None:
     xs = sorted({float(row[x_key]) for row in rows})
     ys = sorted({float(row[y_key]) for row in rows})
@@ -225,7 +227,21 @@ def _draw_region_panel(
             canvas.setFillColor(WHITE)
             canvas.circle(x, y, 1.2, stroke=0, fill=1)
 
-    _axis_ticks(canvas, left, bottom, width, height, xmin, xmax, ymin, ymax, xticks, yticks)
+    _axis_ticks(
+        canvas,
+        left,
+        bottom,
+        width,
+        height,
+        xmin,
+        xmax,
+        ymin,
+        ymax,
+        xticks,
+        yticks,
+        xformat=xformat,
+        yformat=yformat,
+    )
 
 
 def phase_pdf(csv_path: Path, pdf_path: Path, x_key: str, y_key: str, y_label: str) -> None:
@@ -458,6 +474,93 @@ def robustness_pdf(csv_path: Path, pdf_path: Path) -> None:
             canvas.setFont("Helvetica", 6)
             for fraction in (0.0, 0.5, 1.0):
                 canvas.drawRightString(left - 5, bottom + fraction * height - 2, f"{fraction:.0%}")
+    canvas.save()
+
+
+def robustness_extensions_pdf(output: Path) -> None:
+    """Render nested-box and post-release deployment-delay checks."""
+    summary = _read(output / "robustness_box_summary.csv")
+    delay_rows = _read(output / "open_delay_diagram.csv")
+    page = (680, 340)
+    canvas = Canvas(str(output / "robustness_extensions.pdf"), pagesize=page)
+    _write_header(
+        canvas,
+        "Robustness beyond the reference specification",
+        "Nested parameter scopes change design shares; post-release deployment delays change who obtains effective capability first.",
+        page[0],
+    )
+    _policy_legend(canvas, 36, 283, compact=True)
+
+    left, bottom, width, height = 58, 68, 245, 165
+    canvas.setFillColor(INK)
+    canvas.setFont("Helvetica-Bold", 8)
+    canvas.drawString(left, bottom + height + 13, "A. Policy shares in nested design boxes")
+    canvas.setStrokeColor(GRID)
+    canvas.setLineWidth(0.5)
+    for fraction in (0.25, 0.50, 0.75, 1.00):
+        y = bottom + fraction * height
+        canvas.line(left, y, left + width, y)
+    for index, box_name in enumerate(("narrow", "reference", "wide")):
+        x = left + 27 + index * 73
+        y = bottom
+        subset = [row for row in summary if row["box"] == box_name]
+        for policy in PALETTE:
+            share = float(next(row["share"] for row in subset if row["policy"] == policy))
+            segment = share * height
+            canvas.setFillColor(PALETTE[policy])
+            canvas.rect(x, y, 42, segment, stroke=0, fill=1)
+            if share >= 0.11:
+                canvas.setFillColor(WHITE)
+                canvas.setFont("Helvetica-Bold", 6)
+                canvas.drawCentredString(x + 21, y + segment / 2 - 2, f"{share:.0%}")
+            y += segment
+        canvas.setFillColor(MUTED)
+        canvas.setFont("Helvetica", 6.5)
+        canvas.drawCentredString(x + 21, bottom - 12, box_name.capitalize())
+    canvas.setFillColor(MUTED)
+    canvas.setFont("Helvetica", 6)
+    for fraction in (0.0, 0.5, 1.0):
+        canvas.drawRightString(left - 5, bottom + fraction * height - 2, f"{fraction:.0%}")
+    canvas.drawCentredString(
+        left + width / 2,
+        bottom - 28,
+        "Each bar summarizes 2,048 deterministic design points",
+    )
+
+    left2, bottom2, width2, height2 = 386, 68, 250, 165
+    canvas.setFillColor(INK)
+    canvas.setFont("Helvetica-Bold", 8)
+    canvas.drawString(left2, bottom2 + height2 + 13, "B. Effective-use delays after weight access")
+    _draw_region_panel(
+        canvas,
+        delay_rows,
+        "open_adversary_delay",
+        "open_defender_delay",
+        left2,
+        bottom2,
+        width2,
+        height2,
+        (0.0, 0.25, 0.50, 0.75),
+        (0.0, 0.25, 0.50, 0.75),
+        use_initials=True,
+        xformat=".2g",
+        yformat=".2g",
+    )
+    canvas.setStrokeColor(colors.Color(1, 1, 1, alpha=0.9))
+    canvas.setDash(3, 2)
+    canvas.setLineWidth(0.8)
+    canvas.line(left2, bottom2, left2 + width2, bottom2 + height2)
+    canvas.setDash()
+    _label_axes(
+        canvas,
+        left2,
+        bottom2,
+        width2,
+        height2,
+        "Adversary effective-use delay (years)",
+        "Defender effective-use delay (years)",
+        font_size=6.5,
+    )
     canvas.save()
 
 
@@ -762,6 +865,7 @@ def build_all(output: Path) -> None:
     sensitivity_atlas_pdf(output)
     slices_pdf(output / "policy_slices.csv", output / "policy_slices.pdf")
     robustness_pdf(output / "robustness_summary.csv", output / "robustness_summary.pdf")
+    robustness_extensions_pdf(output)
     release_evidence_pdf(output / "release_evidence.csv", output / "release_evidence.pdf")
     cyber_evidence_pdf(output / "cyber_evidence.csv", output / "cyber_evidence.pdf")
     incident_asymmetry_pdf(output / "incident_asymmetry.pdf")

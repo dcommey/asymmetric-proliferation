@@ -5,8 +5,8 @@ type: software
 version: 0.1.0
 date-released: 2026-07-21
 authors:
-  - family-names: "Author"
-    given-names: "Name"
+  - family-names: "Commey"
+    given-names: "Daniel"
+    orcid: "https://orcid.org/0000-0001-5759-918X"
 repository-code: "https://github.com/USERNAME/asymmetric-proliferation"
 license: MIT
-
