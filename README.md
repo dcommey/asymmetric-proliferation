@@ -20,9 +20,9 @@ capability moat, defender-window success, costly acquisition effort, and the
 closed-form proliferation-reversal threshold. A deterministic 2,048-point
 low-discrepancy design tests the policy ranking across eleven uncertain inputs,
 including tail costs for controlled systems as well as open-release irreversibility.
-Two source-backed CSV files document observed release pathways and UK AI
-Security Institute cyber comparisons; they are descriptive evidence, not model
-calibration targets.
+Three source-backed CSV files document observed release pathways, UK AI
+Security Institute cyber comparisons, and the July 2026 Hugging Face incident;
+they are descriptive evidence, not model calibration targets.
 
 ## Reproduce the paper figures
 
@@ -37,7 +37,7 @@ python -m unittest discover -s tests -v
 ```
 
 The command writes the complete calibration, policy comparisons, global
-sensitivity design, observed-evidence tables, and eight vector PDF figures. To
+sensitivity design, observed-evidence tables, and nine vector PDF figures. To
 write figures directly into a checked-out paper directory:
 
 ```bash

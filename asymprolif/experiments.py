@@ -239,6 +239,7 @@ def run(output: Path, size: int = 61) -> Dict[str, Path]:
         "robustness_summary": output / "robustness_summary.csv",
         "release_evidence": output / "release_evidence.csv",
         "cyber_evidence": output / "cyber_evidence.csv",
+        "incident_evidence": output / "incident_evidence.csv",
     }
     write_csv(files["phase"], phase_diagram(base, size))
     write_csv(files["externality"], externality_diagram(base, size))
@@ -254,7 +255,7 @@ def run(output: Path, size: int = 61) -> Dict[str, Path]:
     robustness = robustness_scan(base)
     write_csv(files["robustness"], robustness)
     write_csv(files["robustness_summary"], summarize_robustness(robustness))
-    for name in ("release_evidence", "cyber_evidence"):
+    for name in ("release_evidence", "cyber_evidence", "incident_evidence"):
         source = EVIDENCE_DIR / f"{name}.csv"
         if not source.exists():
             raise FileNotFoundError(f"missing evidence file: {source}")

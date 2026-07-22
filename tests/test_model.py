@@ -149,6 +149,15 @@ class WelfareModelTest(unittest.TestCase):
             else:
                 self.assertGreater(float(row["value"]), 0.0)
 
+    def test_incident_evidence_preserves_provider_uncertainty(self):
+        with (EVIDENCE_DIR / "incident_evidence.csv").open() as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 3)
+        hosted = next(row for row in rows if row["case_id"] == "hf-hosted-refusal")
+        self.assertEqual(hosted["model_or_service"], "Unnamed frontier models")
+        self.assertIn("did not name", hosted["evidence_limit"])
+        self.assertTrue(all(row["source_url"].startswith("https://") for row in rows))
+
 
 if __name__ == "__main__":
     unittest.main()

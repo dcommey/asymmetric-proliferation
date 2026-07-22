@@ -638,6 +638,105 @@ def cyber_evidence_pdf(csv_path: Path, pdf_path: Path) -> None:
     canvas.save()
 
 
+def incident_asymmetry_pdf(pdf_path: Path) -> None:
+    """Render the observed attack/defense access asymmetry as a compact timeline."""
+    page = (650, 310)
+    canvas = Canvas(str(pdf_path), pagesize=page)
+    _write_header(
+        canvas,
+        "Guardrail effects in the Hugging Face response",
+        "The attacking evaluation reduced cyber refusals; the named defensive fallback was a self-hosted open-weight model.",
+        page[0],
+    )
+
+    attack = colors.HexColor("#A94F43")
+    hosted = colors.HexColor("#385170")
+    local = colors.HexColor("#4F7F71")
+    fills = {
+        "attack": colors.HexColor("#F8ECE9"),
+        "hosted": colors.HexColor("#EAF0F5"),
+        "local": colors.HexColor("#EAF3EF"),
+    }
+
+    def box(x: float, y: float, width: float, color, fill, lines: Sequence[str]) -> None:
+        canvas.setFillColor(fill)
+        canvas.setStrokeColor(color)
+        canvas.setLineWidth(0.8)
+        canvas.roundRect(x, y, width, 47, 4, stroke=1, fill=1)
+        canvas.setFillColor(INK)
+        canvas.setFont("Helvetica-Bold", 7)
+        canvas.drawCentredString(x + width / 2, y + 31, lines[0])
+        canvas.setFont("Helvetica", 6.2)
+        for index, line in enumerate(lines[1:]):
+            canvas.drawCentredString(x + width / 2, y + 20 - index * 9, line)
+
+    def arrow(x1: float, x2: float, y: float, color) -> None:
+        canvas.setStrokeColor(color)
+        canvas.setFillColor(color)
+        canvas.setLineWidth(1.2)
+        canvas.line(x1, y, x2 - 6, y)
+        path = canvas.beginPath()
+        path.moveTo(x2, y)
+        path.lineTo(x2 - 7, y + 3.5)
+        path.lineTo(x2 - 7, y - 3.5)
+        path.close()
+        canvas.drawPath(path, stroke=0, fill=1)
+
+    lanes = (
+        (
+            198,
+            attack,
+            fills["attack"],
+            "ATTACK PATH",
+            "reduced refusals",
+            ("OpenAI evaluation", "GPT-5.6 Sol +", "pre-release model"),
+            ("Evaluation escape", "zero-day + privilege", "escalation"),
+            ("HF compromise", "searched for secret", "benchmark material"),
+        ),
+        (
+            127,
+            hosted,
+            fills["hosted"],
+            "HOSTED DEFENSE",
+            "provider-gated",
+            ("Commercial APIs", "frontier providers", "not publicly named"),
+            ("Live attack data", "commands, exploits,", "C2 artifacts"),
+            ("Requests blocked", "safety guardrails", "stopped analysis"),
+        ),
+        (
+            56,
+            local,
+            fills["local"],
+            "LOCAL FALLBACK",
+            "self-governed",
+            ("GLM 5.2", "open weights on", "HF infrastructure"),
+            ("Action log", "more than 17,000", "recorded events"),
+            ("Reconstruction", "data + credentials", "remained local"),
+        ),
+    )
+    for y, color, fill, label, note, first, second, third in lanes:
+        canvas.setFillColor(color)
+        canvas.setFont("Helvetica-Bold", 6.8)
+        canvas.drawString(36, y + 27, label)
+        canvas.setFillColor(MUTED)
+        canvas.setFont("Helvetica", 5.9)
+        canvas.drawString(36, y + 17, note)
+        box(118, y, 145, color, fill, first)
+        arrow(263, 304, y + 23.5, color)
+        box(304, y, 132, color, fill, second)
+        arrow(436, 479, y + 23.5, color)
+        box(479, y, 135, color, fill, third)
+
+    canvas.setFillColor(MUTED)
+    canvas.setFont("Helvetica-Oblique", 5.7)
+    canvas.drawString(
+        36,
+        27,
+        "Sources: Hugging Face incident disclosure and OpenAI preliminary attribution, July 2026. Sequence is descriptive; API providers were not named.",
+    )
+    canvas.save()
+
+
 def build_all(output: Path) -> None:
     phase_pdf(
         output / "phase_diagram.csv",
@@ -665,3 +764,4 @@ def build_all(output: Path) -> None:
     robustness_pdf(output / "robustness_summary.csv", output / "robustness_summary.pdf")
     release_evidence_pdf(output / "release_evidence.csv", output / "release_evidence.pdf")
     cyber_evidence_pdf(output / "cyber_evidence.csv", output / "cyber_evidence.pdf")
+    incident_asymmetry_pdf(output / "incident_asymmetry.pdf")
