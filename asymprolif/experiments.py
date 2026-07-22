@@ -128,13 +128,13 @@ def _scale(unit_value: float, lower: float, upper: float) -> float:
 def robustness_scan(base: Calibration, samples: int = 2048) -> List[Dict[str, object]]:
     """Deterministic global sensitivity scan over a documented parameter box.
 
-    The prime-base low-discrepancy design covers ten uncertain inputs without
+    The prime-base low-discrepancy design covers eleven uncertain inputs without
     assigning a probability distribution to them.  Rows are design points, not
     estimates of how likely any calibration is in the world.
     """
     if samples < 1:
         raise ValueError("samples must be positive")
-    primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29)
+    primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31)
     rows: List[Dict[str, object]] = []
     for sample_id in range(1, samples + 1):
         u = [_van_der_corput(sample_id, prime) for prime in primes]
@@ -151,7 +151,8 @@ def robustness_scan(base: Calibration, samples: int = 2048) -> List[Dict[str, ob
             guardrail_deterrence=_scale(u[6], 0.30, 0.85),
             guardrail_friction=_scale(u[7], 0.04, 0.25),
             irreversibility_guarded=_scale(u[8], 0.15, 0.65),
-            prerelease_delay_cost=_scale(u[9], 0.03, 0.20),
+            controlled_tail_cost=_scale(u[9], 0.00, 0.65),
+            prerelease_delay_cost=_scale(u[10], 0.03, 0.20),
         )
         ranked = list(compare_policies(c).values())
         rows.append(
@@ -166,6 +167,7 @@ def robustness_scan(base: Calibration, samples: int = 2048) -> List[Dict[str, ob
                 "guardrail_deterrence": c.guardrail_deterrence,
                 "guardrail_friction": c.guardrail_friction,
                 "irreversibility_guarded": c.irreversibility_guarded,
+                "controlled_tail_cost": c.controlled_tail_cost,
                 "prerelease_delay_cost": c.prerelease_delay_cost,
                 "policy": ranked[0].policy,
                 "runner_up": ranked[1].policy,
@@ -181,12 +183,13 @@ def _quartile(value: float, lower: float, upper: float) -> int:
 
 
 def summarize_robustness(rows: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
-    """Aggregate winning-policy shares by quartile for three focal inputs."""
+    """Aggregate winning-policy shares by quartile for four focal inputs."""
     materialized = list(rows)
     specifications = (
         ("substitution ratio", "adversary_defender_rate_ratio", 0.30, 3.00),
         ("opportunistic misuse", "opportunistic_misuse", 0.10, 1.40),
         ("defensive externality", "defensive_externality", 0.10, 1.20),
+        ("controlled tail cost", "controlled_tail_cost", 0.00, 0.65),
     )
     output: List[Dict[str, object]] = []
     for label, key, lower, upper in specifications:

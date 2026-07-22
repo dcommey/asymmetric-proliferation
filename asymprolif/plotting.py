@@ -401,19 +401,30 @@ def slices_pdf(csv_path: Path, pdf_path: Path) -> None:
 
 def robustness_pdf(csv_path: Path, pdf_path: Path) -> None:
     rows = _read(csv_path)
-    page = (650, 300)
+    page = (650, 430)
     canvas = Canvas(str(pdf_path), pagesize=page)
     _write_header(
         canvas,
-        "Global sensitivity across a ten-dimensional parameter box",
+        "Parameter-box sensitivity across eleven inputs",
         "Winning-policy shares across 2,048 deterministic low-discrepancy design points; shares describe the design, not real-world probabilities.",
         page[0],
     )
-    _policy_legend(canvas, 36, 243, compact=True)
-    parameters = ("substitution ratio", "opportunistic misuse", "defensive externality")
-    labels = ("A. Substitution ratio", "B. Opportunistic misuse", "C. Defensive externality")
+    _policy_legend(canvas, 36, 373, compact=True)
+    parameters = (
+        "substitution ratio",
+        "opportunistic misuse",
+        "defensive externality",
+        "controlled tail cost",
+    )
+    labels = (
+        "A. Substitution ratio",
+        "B. Opportunistic misuse",
+        "C. Defensive externality",
+        "D. Controlled-system tail cost",
+    )
     for panel_index, (parameter, panel_label) in enumerate(zip(parameters, labels)):
-        left, bottom, width, height = 52 + panel_index * 202, 55, 163, 158
+        column, row = panel_index % 2, panel_index // 2
+        left, bottom, width, height = 62 + column * 302, 211 - row * 164, 224, 118
         canvas.setFillColor(INK)
         canvas.setFont("Helvetica-Bold", 7.4)
         canvas.drawString(left, bottom + height + 8, panel_label)
@@ -423,27 +434,27 @@ def robustness_pdf(csv_path: Path, pdf_path: Path) -> None:
             y = bottom + fraction * height
             canvas.line(left, y, left + width, y)
         for quartile in range(1, 5):
-            x = left + 10 + (quartile - 1) * 39
+            x = left + 15 + (quartile - 1) * 52
             y = bottom
             subset = [row for row in rows if row["parameter"] == parameter and int(row["quartile"]) == quartile]
             for policy in PALETTE:
                 share = float(next(row["share"] for row in subset if row["policy"] == policy))
                 segment = share * height
                 canvas.setFillColor(PALETTE[policy])
-                canvas.rect(x, y, 25, segment, stroke=0, fill=1)
+                canvas.rect(x, y, 32, segment, stroke=0, fill=1)
                 if share >= 0.14:
                     canvas.setFillColor(WHITE)
                     canvas.setFont("Helvetica-Bold", 5.8)
-                    canvas.drawCentredString(x + 12.5, y + segment / 2 - 2, f"{share:.0%}")
+                    canvas.drawCentredString(x + 16, y + segment / 2 - 2, f"{share:.0%}")
                 y += segment
             canvas.setFillColor(MUTED)
             canvas.setFont("Helvetica", 6.2)
-            canvas.drawCentredString(x + 12.5, bottom - 11, f"Q{quartile}")
+            canvas.drawCentredString(x + 16, bottom - 11, f"Q{quartile}")
         canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica", 5.8)
         canvas.drawString(left + 8, bottom - 23, "low")
         canvas.drawRightString(left + width - 8, bottom - 23, "high")
-        if panel_index == 0:
+        if column == 0:
             canvas.setFont("Helvetica", 6)
             for fraction in (0.0, 0.5, 1.0):
                 canvas.drawRightString(left - 5, bottom + fraction * height - 2, f"{fraction:.0%}")

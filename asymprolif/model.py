@@ -40,6 +40,7 @@ class Calibration:
     benefit_prerelease: float = 0.17
     benefit_open_guarded: float = 0.34
     benefit_open_minimal: float = 0.40
+    controlled_tail_cost: float = 0.0
     irreversibility_guarded: float = 0.38
     irreversibility_minimal: float = 0.52
     prerelease_windows: Tuple[float, ...] = (0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00)
@@ -79,6 +80,14 @@ def _validate(c: Calibration) -> None:
     for name, value in shares.items():
         if not 0 <= value <= 1:
             raise ValueError(f"{name} must be in [0, 1]")
+    nonnegative = {
+        "controlled_tail_cost": c.controlled_tail_cost,
+        "irreversibility_guarded": c.irreversibility_guarded,
+        "irreversibility_minimal": c.irreversibility_minimal,
+    }
+    for name, value in nonnegative.items():
+        if value < 0:
+            raise ValueError(f"{name} must be nonnegative")
 
 
 def access_exposure(rate: float, rho: float) -> float:
@@ -269,9 +278,12 @@ def _prerelease_outcome(c: Calibration, tau: float) -> Outcome:
     post_benefit = exp(-c.rho * tau) * c.benefit_open_guarded / c.rho
     delay_cost = c.prerelease_delay_cost * tau
     benefit = pre_benefit + post_benefit - delay_cost
-    irreversibility = exp(-c.rho * tau) * c.irreversibility_guarded
-    welfare = benefit - harm - irreversibility
-    return Outcome("prerelease", welfare, harm, benefit, irreversibility, tau)
+    open_irreversibility = exp(-c.rho * tau) * c.irreversibility_guarded
+    controlled_exposure = 1.0 - exp(-c.rho * tau)
+    controlled_tail_cost = controlled_exposure * c.controlled_tail_cost
+    one_time_cost = open_irreversibility + controlled_tail_cost
+    welfare = benefit - harm - one_time_cost
+    return Outcome("prerelease", welfare, harm, benefit, one_time_cost, tau)
 
 
 def evaluate_policy(c: Calibration, policy: str) -> Outcome:
@@ -279,7 +291,8 @@ def evaluate_policy(c: Calibration, policy: str) -> Outcome:
     if policy == "controlled":
         harm = _controlled_harm(c)
         benefit = c.benefit_controlled / c.rho
-        return Outcome(policy, benefit - harm, harm, benefit, 0.0)
+        tail_cost = c.controlled_tail_cost
+        return Outcome(policy, benefit - harm - tail_cost, harm, benefit, tail_cost)
     if policy == "open_guarded":
         return _open_outcome(c, guarded=True)
     if policy == "open_minimal":

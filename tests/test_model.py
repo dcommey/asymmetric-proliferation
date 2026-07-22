@@ -1,6 +1,7 @@
 import csv
 import unittest
 from datetime import date
+from math import exp
 
 from asymprolif.experiments import EVIDENCE_DIR, robustness_scan, summarize_robustness
 from asymprolif.model import (
@@ -89,6 +90,23 @@ class WelfareModelTest(unittest.TestCase):
         low_gap = evaluate_policy(low, "open_guarded").welfare - evaluate_policy(low, "open_minimal").welfare
         high_gap = evaluate_policy(high, "open_guarded").welfare - evaluate_policy(high, "open_minimal").welfare
         self.assertGreater(high_gap, low_gap)
+
+    def test_controlled_tail_cost_lowers_controlled_welfare(self):
+        base = Calibration(controlled_tail_cost=0.0)
+        costly = base.with_changes(controlled_tail_cost=0.4)
+        welfare_loss = evaluate_policy(base, "controlled").welfare - evaluate_policy(
+            costly, "controlled"
+        ).welfare
+        self.assertAlmostEqual(welfare_loss, 0.4)
+
+    def test_prerelease_inherits_partial_controlled_tail_cost(self):
+        base = Calibration(prerelease_windows=(1.0,), controlled_tail_cost=0.0)
+        costly = base.with_changes(controlled_tail_cost=0.4)
+        welfare_loss = evaluate_policy(base, "prerelease").welfare - evaluate_policy(
+            costly, "prerelease"
+        ).welfare
+        expected = 0.4 * (1.0 - exp(-base.rho))
+        self.assertAlmostEqual(welfare_loss, expected)
 
     def test_invalid_policy_is_rejected(self):
         with self.assertRaises(ValueError):
