@@ -10,6 +10,7 @@ from asymprolif.model import (
     defender_window_success,
     evaluate_policy,
     marginal_empowerment,
+    proliferation_threshold,
 )
 
 
@@ -44,6 +45,19 @@ class AnalyticResultsTest(unittest.TestCase):
     def test_capability_moat_tracks_access_advantage(self):
         self.assertGreater(capability_moat(1.4, 0.5, 1.0, 1.0), 0.0)
         self.assertAlmostEqual(capability_moat(0.8, 0.8, 1.0, 2.0), 0.0)
+
+    def test_closed_form_proliferation_threshold_is_a_root(self):
+        psi_zero, offense_increment, rho = -1.0, 1.0, 0.5
+        threshold = proliferation_threshold(psi_zero, offense_increment, rho)
+        self.assertIsNotNone(threshold)
+        psi_at_threshold = psi_zero + offense_increment / rho * (
+            threshold / (threshold + rho)
+        )
+        self.assertAlmostEqual(psi_at_threshold, 0.0)
+
+    def test_proliferation_threshold_requires_an_interior_crossing(self):
+        self.assertIsNone(proliferation_threshold(0.1, 1.0, 0.5))
+        self.assertIsNone(proliferation_threshold(-3.0, 1.0, 0.5))
 
 
 class WelfareModelTest(unittest.TestCase):

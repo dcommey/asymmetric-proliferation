@@ -11,6 +11,7 @@ from .model import (
     defender_window_success,
     evaluate_policy,
     marginal_empowerment,
+    proliferation_threshold,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "defender_window_success",
     "evaluate_policy",
     "marginal_empowerment",
+    "proliferation_threshold",
 ]

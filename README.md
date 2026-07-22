@@ -15,6 +15,10 @@ adversaries may acquire substitute capability faster than the distributed
 defensive ecosystem. Open release removes that timing difference but creates
 opportunistic misuse and an irreversible proliferation cost.
 
+The analytic helpers also reproduce finite-horizon marginal empowerment, the
+capability moat, defender-window success, costly acquisition effort, and the
+closed-form proliferation-reversal threshold.
+
 ## Reproduce the paper figures
 
 Python 3.9 or newer is supported.

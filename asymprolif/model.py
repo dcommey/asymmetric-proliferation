@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import exp, log1p
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, Optional, Tuple
 
 
 POLICIES: Tuple[str, ...] = ("controlled", "prerelease", "open_guarded", "open_minimal")
@@ -57,7 +57,7 @@ class Outcome:
     discounted_harm: float
     discounted_benefit: float
     irreversibility: float
-    window: float | None = None
+    window: Optional[float] = None
 
 
 def _validate(c: Calibration) -> None:
@@ -147,6 +147,28 @@ def capability_moat(
     privileged = usefulness * (1.0 - exp(-privileged_rate * horizon))
     constrained = usefulness * (1.0 - exp(-constrained_rate * horizon))
     return privileged - constrained
+
+
+def proliferation_threshold(
+    psi_zero: float,
+    offense_increment: float,
+    rho: float,
+) -> Optional[float]:
+    """Closed-form adversary-substitution threshold in the linear benchmark.
+
+    ``psi_zero`` is broad-release welfare minus controlled-access welfare when
+    the sophisticated-adversary acquisition rate is zero.
+    ``offense_increment`` is the product ``alpha*q_s`` from the paper. A
+    threshold exists only when control wins at zero and broad release wins as
+    the acquisition rate tends to infinity.
+    """
+    if offense_increment <= 0 or rho <= 0:
+        raise ValueError("offense_increment and rho must be positive")
+    psi_infinity = psi_zero + offense_increment / rho
+    if psi_zero >= 0 or psi_infinity <= 0:
+        return None
+    theta = -rho * psi_zero / offense_increment
+    return rho * theta / (1.0 - theta)
 
 
 def defender_window_success(deploy_rate: float, adversary_rate: float, window: float) -> float:
