@@ -152,4 +152,11 @@ def build_all(output: Path) -> None:
         "defensive_externality",
         "Defensive network externality",
     )
+    phase_pdf(
+        output / "cost_exchange_diagram.csv",
+        output / "cost_exchange_diagram.pdf",
+        "adversary_defender_rate_ratio",
+        "offense_defense_conversion_ratio",
+        "Offense / defense capability conversion",
+    )
     slices_pdf(output / "policy_slices.csv", output / "policy_slices.pdf")

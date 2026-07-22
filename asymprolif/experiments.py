@@ -63,6 +63,29 @@ def externality_diagram(base: Calibration, size: int = 61) -> List[Dict[str, obj
     return rows
 
 
+def cost_exchange_diagram(base: Calibration, size: int = 61) -> List[Dict[str, object]]:
+    """Vary adversary substitution and offense/defense direct conversion."""
+    rows: List[Dict[str, object]] = []
+    for rate_ratio in _linspace(0.15, 3.5, size):
+        for conversion_ratio in _linspace(0.40, 2.50, size):
+            c = base.with_changes(
+                lambda_adversary=rate_ratio * base.lambda_defender,
+                adversary_uplift=conversion_ratio * base.defender_uplift,
+            )
+            ranked = list(compare_policies(c).values())
+            rows.append(
+                {
+                    "adversary_defender_rate_ratio": rate_ratio,
+                    "offense_defense_conversion_ratio": conversion_ratio,
+                    "policy": ranked[0].policy,
+                    "welfare": ranked[0].welfare,
+                    "runner_up": ranked[1].policy,
+                    "margin": ranked[0].welfare - ranked[1].welfare,
+                }
+            )
+    return rows
+
+
 def policy_slices(base: Calibration, points: int = 121) -> List[Dict[str, object]]:
     rows: List[Dict[str, object]] = []
     for misuse in (0.20, 0.62, 1.10):
@@ -100,12 +123,14 @@ def run(output: Path, size: int = 61) -> Dict[str, Path]:
     files = {
         "phase": output / "phase_diagram.csv",
         "externality": output / "externality_diagram.csv",
+        "cost_exchange": output / "cost_exchange_diagram.csv",
         "slices": output / "policy_slices.csv",
         "calibration": output / "calibration.csv",
         "summary": output / "policy_summary.csv",
     }
     write_csv(files["phase"], phase_diagram(base, size))
     write_csv(files["externality"], externality_diagram(base, size))
+    write_csv(files["cost_exchange"], cost_exchange_diagram(base, size))
     write_csv(files["slices"], policy_slices(base))
     write_csv(files["calibration"], [{"parameter": k, "value": v} for k, v in asdict(base).items()])
     summary = []
@@ -115,4 +140,3 @@ def run(output: Path, size: int = 61) -> Dict[str, Path]:
         summary.append(row)
     write_csv(files["summary"], summary)
     return files
-

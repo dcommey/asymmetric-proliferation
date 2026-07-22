@@ -28,7 +28,7 @@ python -m unittest discover -s tests -v
 ```
 
 The command writes the complete calibration, policy comparisons, phase-diagram
-data, and three vector PDF figures. To write figures directly into a checked-out
+data, and four vector PDF figures. To write figures directly into a checked-out
 paper directory:
 
 ```bash
@@ -54,4 +54,3 @@ quantity in the phase diagrams is regenerated from the parameters recorded in
 ## Citation and license
 
 See `CITATION.cff`. Code is released under the MIT License.
-

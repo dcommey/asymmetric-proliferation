@@ -5,9 +5,11 @@ from asymprolif.model import (
     POLICIES,
     acquisition_best_response,
     access_exposure,
+    capability_moat,
     compare_policies,
     defender_window_success,
     evaluate_policy,
+    marginal_empowerment,
 )
 
 
@@ -31,6 +33,17 @@ class AnalyticResultsTest(unittest.TestCase):
         self.assertAlmostEqual(residual, 0.0, places=10)
         _, higher_rate = acquisition_best_response(0.2, 0.8, 2.0, 1.1, 0.3)
         self.assertGreater(higher_rate, rate)
+
+    def test_asymmetric_empowerment_favors_slower_substituter(self):
+        horizon = 1.0
+        defender_gain = marginal_empowerment(1.0, 0.5, horizon)
+        sophisticated_gain = marginal_empowerment(1.0, 1.5, horizon)
+        self.assertGreater(defender_gain, sophisticated_gain)
+        self.assertAlmostEqual(marginal_empowerment(2.0, 0.7, 0.0), 2.0)
+
+    def test_capability_moat_tracks_access_advantage(self):
+        self.assertGreater(capability_moat(1.4, 0.5, 1.0, 1.0), 0.0)
+        self.assertAlmostEqual(capability_moat(0.8, 0.8, 1.0, 2.0), 0.0)
 
 
 class WelfareModelTest(unittest.TestCase):

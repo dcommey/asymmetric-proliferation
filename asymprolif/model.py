@@ -122,6 +122,33 @@ def acquisition_best_response(
     return effort, base_rate + productivity * effort
 
 
+def marginal_empowerment(usefulness: float, substitute_rate: float, horizon: float) -> float:
+    """Capability added by immediate release at a finite policy horizon.
+
+    Under restriction, the actor has obtained a substitute by ``horizon`` with
+    probability ``1-exp(-substitute_rate*horizon)``. Immediate release closes
+    the remaining access gap, so its marginal capability effect is the model's
+    usefulness times the probability the actor would still lack a substitute.
+    """
+    if min(usefulness, substitute_rate, horizon) < 0:
+        raise ValueError("inputs must be nonnegative")
+    return usefulness * exp(-substitute_rate * horizon)
+
+
+def capability_moat(
+    privileged_rate: float,
+    constrained_rate: float,
+    usefulness: float,
+    horizon: float,
+) -> float:
+    """Expected restricted-access capability gap at a finite horizon."""
+    if min(privileged_rate, constrained_rate, usefulness, horizon) < 0:
+        raise ValueError("inputs must be nonnegative")
+    privileged = usefulness * (1.0 - exp(-privileged_rate * horizon))
+    constrained = usefulness * (1.0 - exp(-constrained_rate * horizon))
+    return privileged - constrained
+
+
 def defender_window_success(deploy_rate: float, adversary_rate: float, window: float) -> float:
     """P(T_deploy < min(T_adversary, window)) for independent exponentials."""
     if min(deploy_rate, adversary_rate, window) < 0:

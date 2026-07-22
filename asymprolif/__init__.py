@@ -6,9 +6,11 @@ from .model import (
     POLICIES,
     acquisition_best_response,
     access_exposure,
+    capability_moat,
     compare_policies,
     defender_window_success,
     evaluate_policy,
+    marginal_empowerment,
 )
 
 __all__ = [
@@ -17,7 +19,9 @@ __all__ = [
     "POLICIES",
     "acquisition_best_response",
     "access_exposure",
+    "capability_moat",
     "compare_policies",
     "defender_window_success",
     "evaluate_policy",
+    "marginal_empowerment",
 ]
