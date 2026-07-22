@@ -13,3 +13,6 @@ dependencies = ["reportlab==4.4.9"]
 
 [tool.setuptools.packages.find]
 include = ["asymprolif*"]
+
+[tool.setuptools.package-data]
+asymprolif = ["data/*.csv"]

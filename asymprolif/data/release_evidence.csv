@@ -1,0 +1,6 @@
+case_id,model,developer,announcement_date,hosted_or_api_date,weight_date,weight_status_at_2026_07_21,weight_lag_days,access_at_announcement,deployment_floor,source_label,source_url
+gpt2,GPT-2 1.5B,OpenAI,2019-02-14,,2019-11-05,released,264,124M weights,"Full 1.5B model; staged through 355M and 774M releases",OpenAI staged-release reports,https://openai.com/index/gpt-2-1-5b-release/
+llama31,Llama 3.1 405B,Meta,2024-07-23,2024-07-23,2024-07-23,released,0,Hosted partners and weights,"405B model in one FP8 server node; 8B and 70B variants also released",Meta release announcement,https://ai.meta.com/blog/meta-llama-3-1/
+deepseekr1,DeepSeek-R1,DeepSeek,2025-01-20,2025-01-20,2025-01-20,released,0,Website API and weights,"671B full model plus six distilled models from 1.5B to 70B",DeepSeek release announcement,https://api-docs.deepseek.com/news/news250120
+gptoss,gpt-oss,OpenAI,2025-08-05,2025-08-05,2025-08-05,released,0,Weights and partner hosting,"20B requires 16 GB memory; 120B fits within 80 GB",OpenAI release announcement,https://openai.com/index/introducing-gpt-oss/
+kimik3,Kimi K3,Moonshot AI,2026-07-16,2026-07-16,2026-07-27,promised,11,Applications and API,"Full model deployment recommends 64 or more accelerators",Moonshot AI announcement,https://www.kimi.com/blog/kimi-k3

@@ -1,5 +1,8 @@
+import csv
 import unittest
+from datetime import date
 
+from asymprolif.experiments import EVIDENCE_DIR, robustness_scan, summarize_robustness
 from asymprolif.model import (
     Calibration,
     POLICIES,
@@ -90,6 +93,43 @@ class WelfareModelTest(unittest.TestCase):
     def test_invalid_policy_is_rejected(self):
         with self.assertRaises(ValueError):
             evaluate_policy(Calibration(), "unknown")
+
+    def test_robustness_design_is_deterministic_and_complete(self):
+        first = robustness_scan(Calibration(), samples=16)
+        second = robustness_scan(Calibration(), samples=16)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 16)
+        self.assertTrue(all(row["policy"] in POLICIES for row in first))
+
+    def test_robustness_summary_shares_sum_to_one(self):
+        summary = summarize_robustness(robustness_scan(Calibration(), samples=32))
+        for parameter in {row["parameter"] for row in summary}:
+            for quartile in range(1, 5):
+                share = sum(
+                    row["share"]
+                    for row in summary
+                    if row["parameter"] == parameter and row["quartile"] == quartile
+                )
+                self.assertAlmostEqual(share, 1.0)
+
+    def test_release_evidence_dates_match_reported_lags(self):
+        with (EVIDENCE_DIR / "release_evidence.csv").open() as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 5)
+        for row in rows:
+            announced = date.fromisoformat(row["announcement_date"])
+            weights = date.fromisoformat(row["weight_date"])
+            self.assertEqual((weights - announced).days, int(row["weight_lag_days"]))
+            self.assertTrue(row["source_url"].startswith("https://"))
+
+    def test_cyber_evidence_has_valid_intervals_and_costs(self):
+        with (EVIDENCE_DIR / "cyber_evidence.csv").open() as handle:
+            rows = list(csv.DictReader(handle))
+        for row in rows:
+            if row["metric"] == "frontier_lag":
+                self.assertLessEqual(float(row["low"]), float(row["high"]))
+            else:
+                self.assertGreater(float(row["value"]), 0.0)
 
 
 if __name__ == "__main__":

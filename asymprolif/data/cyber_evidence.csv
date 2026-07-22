@@ -1,0 +1,10 @@
+metric,period,model,access_type,low,high,value,unit,evidence_note,source_url
+frontier_lag,Jan-Sep 2025,Leading open-weight models,open,6,10,,months,"Internal AISI evaluations; no public model-level decomposition",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+frontier_lag,June 2026,GLM-5.2 and DeepSeek V4-Pro,open,4,7,,months,"Range combines narrow tasks and longer-horizon cyber ranges",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+range_run_cost,2026,Opus 4.5 / 4.6,closed,,,85.00,USD per 100M-token run,"Approximate advertised first-party price",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+range_run_cost,2026,GLM-5.2,open,,,46.00,USD per 100M-token run,"Estimated at advertised first-party price",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+range_run_cost,2026,DeepSeek V4-Pro,open,,,1.19,USD per 100M-token run,"Estimated at advertised first-party price",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+reliable_task_cost,2026,Opus 4.6,closed,,,15.17,USD per solved task,"Tasks solved with 100 percent reliability by both compared models",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+reliable_task_cost,2026,GLM-5.2,open,,,6.12,USD per solved task,"Tasks solved with 100 percent reliability by both compared models",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+reliable_task_cost,2026,Opus 4.5,closed,,,12.50,USD per solved task,"Tasks solved with 100 percent reliability by both compared models",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
+reliable_task_cost,2026,DeepSeek V4-Pro,open,,,.28,USD per solved task,"Tasks solved with 100 percent reliability by both compared models",https://www.aisi.gov.uk/blog/how-far-behind-the-frontier-are-leading-open-weight-models-on-cyber
