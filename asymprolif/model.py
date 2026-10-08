@@ -1,8 +1,7 @@
-"""Welfare model for dual-use model release under asymmetric proliferation.
+"""Welfare model for the release of a dual-use AI model.
 
-Time is measured in years. Flow quantities are discounted continuously.  The
-calibration is deliberately transparent and illustrative; it is not presented
-as a point estimate of real-world welfare.
+The unit of time is the year. The model discounts flow quantities continuously.
+The calibration is illustrative. It is not an estimate of real welfare.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ POLICIES: Tuple[str, ...] = ("controlled", "prerelease", "open_guarded", "open_m
 
 @dataclass(frozen=True)
 class Calibration:
-    """Parameters for the social-welfare comparison."""
+    """Parameters for the comparison of social welfare."""
 
     rho: float = 0.35
     lambda_defender: float = 0.70
@@ -101,7 +100,7 @@ def _validate(c: Calibration) -> None:
 
 
 def access_exposure(rate: float, rho: float) -> float:
-    """Expected discounted time with access after an exponential waiting time."""
+    """Expected discounted time with access after an exponential wait."""
     if rate < 0 or rho <= 0:
         raise ValueError("rate must be nonnegative and rho must be positive")
     return rate / (rho * (rate + rho))
@@ -114,11 +113,11 @@ def acquisition_best_response(
     effort_cost: float,
     rho: float,
 ) -> Tuple[float, float]:
-    """Unique costly-effort best response and the resulting acquisition rate.
+    """Calculate the best effort of one actor and the resulting acquisition rate.
 
-    The actor maximizes ``access_value * access_exposure(rate, rho)`` minus
-    ``effort_cost * effort**2 / 2``, with
-    ``rate = base_rate + productivity * effort``.
+    The actor makes ``access_value * access_exposure(rate, rho)`` minus
+    ``effort_cost * effort**2 / 2`` as large as possible. The rate is
+    ``rate = base_rate + productivity * effort``. The best effort is unique.
     """
     if base_rate < 0 or min(productivity, access_value, effort_cost, rho) <= 0:
         raise ValueError("base_rate must be nonnegative and other inputs positive")
@@ -142,12 +141,12 @@ def acquisition_best_response(
 
 
 def marginal_empowerment(usefulness: float, substitute_rate: float, horizon: float) -> float:
-    """Capability added by immediate release at a finite policy horizon.
+    """Calculate the capability that immediate release adds at a fixed horizon.
 
-    Under restriction, the actor has obtained a substitute by ``horizon`` with
-    probability ``1-exp(-substitute_rate*horizon)``. Immediate release closes
-    the remaining access gap, so its marginal capability effect is the model's
-    usefulness times the probability the actor would still lack a substitute.
+    Under restriction, the actor has a substitute at ``horizon`` with the
+    probability ``1-exp(-substitute_rate*horizon)``. Immediate release gives
+    access to all actors. Thus the added capability is the usefulness of the
+    model multiplied by the probability that the actor has no substitute.
     """
     if min(usefulness, substitute_rate, horizon) < 0:
         raise ValueError("inputs must be nonnegative")
@@ -160,7 +159,7 @@ def capability_moat(
     usefulness: float,
     horizon: float,
 ) -> float:
-    """Expected restricted-access capability gap at a finite horizon."""
+    """Expected capability gap under restricted access at a fixed horizon."""
     if min(privileged_rate, constrained_rate, usefulness, horizon) < 0:
         raise ValueError("inputs must be nonnegative")
     privileged = usefulness * (1.0 - exp(-privileged_rate * horizon))
@@ -173,13 +172,12 @@ def proliferation_threshold(
     offense_increment: float,
     rho: float,
 ) -> Optional[float]:
-    """Closed-form adversary-substitution threshold in the linear benchmark.
+    """Calculate the threshold rate of adversary substitution in the linear benchmark.
 
-    ``psi_zero`` is broad-release welfare minus controlled-access welfare when
-    the sophisticated-adversary acquisition rate is zero.
-    ``offense_increment`` is the product ``alpha*q_s`` from the paper. A
-    threshold exists only when control wins at zero and broad release wins as
-    the acquisition rate tends to infinity.
+    ``psi_zero`` is the welfare of broad release minus the welfare of controlled
+    access when the adversary acquisition rate is zero. ``offense_increment`` is
+    the product ``alpha*q_s`` from the paper. A threshold occurs only if control
+    wins at a rate of zero and broad release wins at a very high rate.
     """
     if offense_increment <= 0 or rho <= 0:
         raise ValueError("offense_increment and rho must be positive")
@@ -191,7 +189,7 @@ def proliferation_threshold(
 
 
 def defender_window_success(deploy_rate: float, adversary_rate: float, window: float) -> float:
-    """P(T_deploy < min(T_adversary, window)) for independent exponentials."""
+    """P(T_deploy < min(T_adversary, window)) for independent exponential times."""
     if min(deploy_rate, adversary_rate, window) < 0:
         raise ValueError("rates and window must be nonnegative")
     total = deploy_rate + adversary_rate
@@ -201,7 +199,7 @@ def defender_window_success(deploy_rate: float, adversary_rate: float, window: f
 
 
 def _damage(gap: float, c: Calibration) -> float:
-    """Increasing, convex softplus damage function."""
+    """Softplus damage function. The function increases and is convex."""
     z = c.harm_curvature * gap
     if z > 35:
         softplus = z
@@ -213,7 +211,7 @@ def _damage(gap: float, c: Calibration) -> float:
 
 
 def _state_harm(p_s: float, p_d: float, defender_gain: float, c: Calibration) -> float:
-    """Expected strategic harm for independent binary access/deployment states."""
+    """Expected strategic harm for independent binary states of access and deployment."""
     result = 0.0
     for s, ps in ((0, 1.0 - p_s), (1, p_s)):
         for d, pd in ((0, 1.0 - p_d), (1, p_d)):
@@ -247,30 +245,52 @@ def _discounted_interval(rate: float, stop: float) -> float:
 
 
 def _discounted_open_strategic_harm(
-    c: Calibration, defender_gain: float
+    c: Calibration, defender_gain: float, *, window: float = 0.0
 ) -> float:
-    """Strategic harm after release with deterministic effective-use delays.
+    """Integrate the harm after broad release and keep the earlier capability.
 
-    Weight publication occurs at time zero.  The two delay parameters measure
-    artifact-to-effective-use time for the sophisticated actor and defender.
-    Zero delays recover the immediate-effective-access benchmark exactly.
+    Actors continue to get substitutes before they deploy the released model.
+    After a selected-access window, the existing access continues. Selected
+    defenders keep their smaller reach until broad deployment. A window of zero
+    gives immediate release. Deployment delays of zero give the original benchmark.
     """
+    pre_gain = c.defender_uplift + c.defensive_externality * c.defender_reach_prerelease
+    prior_s = exp(-c.lambda_adversary * window)
+    prior_d = exp(-c.deploy_rate * window)
     delays = sorted({0.0, c.open_adversary_delay, c.open_defender_delay})
     total = 0.0
     for index, start in enumerate(delays):
         stop = delays[index + 1] if index + 1 < len(delays) else None
-        adversary_has_access = start >= c.open_adversary_delay
-        defender_has_access = start >= c.open_defender_delay
-        gap = c.baseline_gap
-        if adversary_has_access:
-            gap += c.adversary_uplift
-        if defender_has_access:
-            gap -= defender_gain
-        if stop is None:
-            weight = exp(-c.rho * start) / c.rho
+        s_ready = start >= c.open_adversary_delay
+        d_ready = start >= c.open_defender_delay
+        # Before public deployment, the probability of no substitute is a*exp(-rate*t).
+        a_s = 0.0 if s_ready else prior_s
+        controlled_gain = c.defender_uplift + c.defensive_externality * c.defender_reach_controlled
+
+        def weight(rate: float) -> float:
+            if stop is None:
+                return exp(-rate * start) / rate
+            return (exp(-rate * start) - exp(-rate * stop)) / rate
+
+        if d_ready:
+            h01 = _damage(c.baseline_gap - defender_gain, c)
+            h11 = _damage(c.baseline_gap + c.adversary_uplift - defender_gain, c)
+            total += h11 * weight(c.rho)
+            total += a_s * (h01 - h11) * weight(c.rho + c.lambda_adversary)
         else:
-            weight = (exp(-c.rho * start) - exp(-c.rho * stop)) / c.rho
-        total += weight * _damage(gap, c)
+            # Selected deployments that end before release continue. Defenders
+            # who get substitutes later keep the controlled reach. These two
+            # groups stay separate. Thus the boundary at tau=0 is continuous.
+            h00 = _damage(c.baseline_gap, c)
+            h10 = _damage(c.baseline_gap + c.adversary_uplift, c)
+            h01_c = _damage(c.baseline_gap - controlled_gain, c)
+            h11_c = _damage(c.baseline_gap + c.adversary_uplift - controlled_gain, c)
+            h01_p = _damage(c.baseline_gap - pre_gain, c)
+            h11_p = _damage(c.baseline_gap + c.adversary_uplift - pre_gain, c)
+            total += (prior_d * h11_c + (1-prior_d) * h11_p) * weight(c.rho)
+            total += prior_d * (h10 - h11_c) * weight(c.rho + c.lambda_defender)
+            total += a_s * (prior_d * (h01_c-h11_c) + (1-prior_d) * (h01_p-h11_p)) * weight(c.rho + c.lambda_adversary)
+            total += a_s * prior_d * (h00-h01_c-h10+h11_c) * weight(c.rho + c.lambda_adversary + c.lambda_defender)
     return total
 
 
@@ -295,7 +315,7 @@ def _open_outcome(c: Calibration, guarded: bool) -> Outcome:
 
 
 def _prerelease_harm(c: Calibration, tau: float) -> float:
-    """Exact pre-window harm plus the guarded-open continuation value."""
+    """Exact harm during the window plus the harm after guarded open release."""
     pre_gain = c.defender_uplift + c.defensive_externality * c.defender_reach_prerelease
     h00 = _damage(c.baseline_gap, c)
     h10 = _damage(c.baseline_gap + c.adversary_uplift, c)
@@ -314,17 +334,25 @@ def _prerelease_harm(c: Calibration, tau: float) -> float:
         * c.opportunistic_misuse
         * _discounted_interval(c.rho, tau)
     )
-    post = exp(-c.rho * tau) * _discounted_open_harm(c, guarded=True)
+    if c.open_adversary_delay == c.open_defender_delay == 0.0:
+        continuation = _discounted_open_harm(c, guarded=True)
+    else:
+        broad_gain = (1.0 - c.guardrail_friction) * (
+            c.defender_uplift + c.defensive_externality * c.defender_reach_open
+        )
+        continuation = _discounted_open_strategic_harm(c, broad_gain, window=tau)
+        continuation += (1.0 - c.guardrail_deterrence) * c.opportunistic_misuse / c.rho
+    post = exp(-c.rho * tau) * continuation
     return pre + post
 
 
 def prerelease_outcome(c: Calibration, tau: float) -> Outcome:
-    """Evaluate a fixed defender-first window followed by guarded release."""
+    """Calculate the outcome of a fixed defender-first window and guarded release."""
     _validate(c)
     if not 0 <= tau <= c.prerelease_window_max:
         raise ValueError("tau must lie in [0, prerelease_window_max]")
     harm = _prerelease_harm(c, tau)
-    # Benefits accrue during selected access, then as guarded-open benefits.
+    # Selected-access benefits apply during the window. Guarded-open benefits apply after it.
     pre_benefit = c.benefit_prerelease * (1.0 - exp(-c.rho * tau)) / c.rho
     post_benefit = exp(-c.rho * tau) * c.benefit_open_guarded / c.rho
     delay_cost = c.prerelease_delay_cost * tau
@@ -338,12 +366,13 @@ def prerelease_outcome(c: Calibration, tau: float) -> Outcome:
 
 
 def _best_prerelease_outcome(c: Calibration) -> Outcome:
-    """Deterministically maximize window welfare on a bounded continuum.
+    """Find the window length with the highest welfare in a bounded interval.
 
-    A uniform global screen locates the best basin; golden-section refinement
-    then searches the adjacent interval.  Endpoints are always evaluated, so
-    ``tau=0`` reproduces guarded open release and the maximum allowed window is
-    not silently excluded.
+    A uniform scan finds the local maxima. A golden-section search then refines
+    each local maximum and the two intervals at the ends. The search is
+    numerical. It does not prove that the result is the global maximum. The
+    code always calculates the two end points. Thus ``tau=0`` gives guarded open
+    release, and the search always includes the maximum window.
     """
     maximum = c.prerelease_window_max
     if maximum == 0:
@@ -351,28 +380,38 @@ def _best_prerelease_outcome(c: Calibration) -> Outcome:
     points = c.window_search_points
     step = maximum / (points - 1)
     screened = [prerelease_outcome(c, index * step) for index in range(points)]
-    best_index = max(range(points), key=lambda index: screened[index].welfare)
-    if best_index in (0, points - 1):
-        return screened[best_index]
-
-    low = (best_index - 1) * step
-    high = (best_index + 1) * step
+    candidates = [screened[0], screened[-1]]
+    basins = [
+        index for index in range(1, points - 1)
+        if screened[index].welfare >= screened[index - 1].welfare
+        and screened[index].welfare >= screened[index + 1].welfare
+    ]
+    # An interval next to an end point can contain an interior maximum.
+    intervals = [(0, 1), (points - 2, points - 1)]
+    intervals.extend((index - 1, index + 1) for index in basins)
     ratio = (5.0 ** 0.5 - 1.0) / 2.0
-    left = high - ratio * (high - low)
-    right = low + ratio * (high - low)
-    left_outcome = prerelease_outcome(c, left)
-    right_outcome = prerelease_outcome(c, right)
-    for _ in range(c.window_refinement_steps):
-        if left_outcome.welfare < right_outcome.welfare:
-            low, left, left_outcome = left, right, right_outcome
-            right = low + ratio * (high - low)
-            right_outcome = prerelease_outcome(c, right)
-        else:
-            high, right, right_outcome = right, left, left_outcome
-            left = high - ratio * (high - low)
-            left_outcome = prerelease_outcome(c, left)
-    candidates = (screened[best_index], left_outcome, right_outcome)
-    return max(candidates, key=lambda outcome: outcome.welfare)
+    for low_index, high_index in intervals:
+        low, high = low_index * step, high_index * step
+        left = high - ratio * (high - low)
+        right = low + ratio * (high - low)
+        left_outcome = prerelease_outcome(c, left)
+        right_outcome = prerelease_outcome(c, right)
+        for _ in range(c.window_refinement_steps):
+            if left_outcome.welfare < right_outcome.welfare:
+                low, left, left_outcome = left, right, right_outcome
+                right = low + ratio * (high - low)
+                right_outcome = prerelease_outcome(c, right)
+            else:
+                high, right, right_outcome = right, left, left_outcome
+                left = high - ratio * (high - low)
+                left_outcome = prerelease_outcome(c, left)
+        candidates.extend((left_outcome, right_outcome))
+    candidates.extend(screened)
+    best = max(candidates, key=lambda outcome: outcome.welfare)
+    # Roundoff error can make a very short window look better than tau=0. Use tau=0.
+    if best.welfare - screened[0].welfare <= 1e-12:
+        return screened[0]
+    return best
 
 
 def evaluate_policy(c: Calibration, policy: str) -> Outcome:
@@ -397,12 +436,11 @@ def compare_policies(c: Calibration, policies: Iterable[str] = POLICIES) -> Dict
 
 
 def rank_distinct_outcomes(c: Calibration) -> Tuple[Outcome, ...]:
-    """Rank economically distinct policy outcomes.
+    """Rank the policy outcomes that are different from each other.
 
-    The boundary ``P(0)`` is exactly guarded open release.  It remains
-    available through :func:`prerelease_outcome` for analytic checks, but is
-    removed from policy counts and runner-up margins when the optimized window
-    collapses to zero.
+    The boundary ``P(0)`` is equal to guarded open release. Use
+    :func:`prerelease_outcome` to calculate it for analytic checks. When the best
+    window is zero, this function removes the window policy from the ranking.
     """
     outcomes = {policy: evaluate_policy(c, policy) for policy in POLICIES}
     prerelease = outcomes["prerelease"]

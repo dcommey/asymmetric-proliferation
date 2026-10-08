@@ -1,4 +1,4 @@
-"""Tools for the asymmetric-proliferation release model."""
+"""Tools for the release model with asymmetric proliferation."""
 
 from .model import (
     Calibration,

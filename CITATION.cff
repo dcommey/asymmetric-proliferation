@@ -1,9 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite the accompanying paper."
-title: "Asymmetric Proliferation"
+message: "If you use this software, cite the paper."
+title: "Who Does Withholding Delay? Replication code"
 type: software
-version: 0.1.0
-date-released: 2026-07-21
+version: 0.2.0
+date-released: 2026-10-08
 authors:
   - family-names: "Commey"
     given-names: "Daniel"

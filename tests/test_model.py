@@ -9,6 +9,8 @@ from asymprolif.experiments import (
     open_delay_diagram,
     robustness_box_scan,
     robustness_scan,
+    scan_calibration,
+    scan_point,
     summarize_robustness,
     summarize_robustness_boxes,
 )
@@ -147,6 +149,70 @@ class WelfareModelTest(unittest.TestCase):
             places=7,
         )
 
+    def test_delayed_continuation_matches_independent_quadrature(self):
+        # Direct time integration does a check of these items: the access that
+        # continues, the substitution that continues, and the two public deployments.
+        # The check does not use the closed form.
+        c = Calibration(open_adversary_delay=0.19, open_defender_delay=0.43)
+        tau = 0.73
+        gain_open = (1-c.guardrail_friction) * (c.defender_uplift + c.defensive_externality*c.defender_reach_open)
+        gain_pre = c.defender_uplift + c.defensive_externality*c.defender_reach_prerelease
+
+        def damage(gap):
+            return c.harm_scale*log1p(exp(c.harm_curvature*gap))/c.harm_curvature
+
+        def flow(t, post):
+            u = t-tau if post else t
+            ps = 1.0 if post and u >= c.open_adversary_delay else 1-exp(-c.lambda_adversary*t)
+            if not post:
+                pd=1-exp(-c.deploy_rate*t)
+                defenders=((0.0,1-pd),(gain_pre,pd))
+            elif u >= c.open_defender_delay:
+                defenders=((gain_open,1.0),)
+            else:
+                prior=exp(-c.deploy_rate*tau)
+                sub=1-exp(-c.lambda_defender*u)
+                gain_control=c.defender_uplift+c.defensive_externality*c.defender_reach_controlled
+                defenders=((gain_pre,1-prior),(gain_control,prior*sub),(0.0,prior*(1-sub)))
+            strategic=sum(prob_s*prob_d*damage(c.baseline_gap+c.adversary_uplift*hs-gain)
+                          for hs,prob_s in ((0,1-ps),(1,ps))
+                          for gain,prob_d in defenders)
+            misuse = (1-c.guardrail_deterrence) if post else c.controlled_misuse_share
+            return exp(-c.rho*t)*(strategic+misuse*c.opportunistic_misuse)
+
+        stops = (0,tau,tau+c.open_adversary_delay,tau+c.open_defender_delay,80)
+        numerical = 0.0
+        for start,stop in zip(stops,stops[1:]):
+            n=10000; dt=(stop-start)/n
+            numerical += dt*sum(flow(start+(j+0.5)*dt,start>=tau) for j in range(n))
+        self.assertAlmostEqual(prerelease_outcome(c,tau).discounted_harm,numerical,places=6)
+
+    def test_delayed_window_is_continuous_at_zero(self):
+        c=Calibration(open_adversary_delay=0.35,open_defender_delay=0.6)
+        self.assertAlmostEqual(prerelease_outcome(c,1e-8).welfare,
+                               evaluate_policy(c,"open_guarded").welfare,places=7)
+
+    def test_window_optimizer_matches_dense_search(self):
+        scenarios = (
+            Calibration(),
+            Calibration(prerelease_delay_cost=0.4),
+            Calibration(open_adversary_delay=0.35,open_defender_delay=0.6),
+            Calibration(lambda_adversary=4,opportunistic_misuse=0.1),
+        )
+        for c in scenarios:
+            with self.subTest(calibration=c):
+                optimized=evaluate_policy(c,"prerelease")
+                dense=max(prerelease_outcome(c,c.prerelease_window_max*j/2000).welfare
+                          for j in range(2001))
+                self.assertGreaterEqual(optimized.welfare+1e-9,dense)
+
+    def test_immediate_release_can_use_substitutes_during_deployment_delay(self):
+        c=Calibration(open_adversary_delay=0.7,open_defender_delay=0.7)
+        # Faster defender substitution must decrease harm before public deployment too.
+        faster=c.with_changes(lambda_defender=3)
+        self.assertGreater(evaluate_policy(faster,"open_guarded").welfare,
+                           evaluate_policy(c,"open_guarded").welfare)
+
     def test_more_adversary_substitution_hurts_controlled_access(self):
         base = Calibration(lambda_adversary=0.25)
         fast = base.with_changes(lambda_adversary=3.0)
@@ -189,6 +255,44 @@ class WelfareModelTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(first), 16)
         self.assertTrue(all(row["policy"] in POLICIES for row in first))
+
+    def test_design_point_maps_to_baseline_at_reference_values(self):
+        base = Calibration()
+        point = {
+            "lambda_defender": base.lambda_defender,
+            "rate_ratio": base.lambda_adversary / base.lambda_defender,
+            "opportunistic_misuse": base.opportunistic_misuse,
+            "defensive_externality": base.defensive_externality,
+            "conversion_ratio": base.adversary_uplift / base.defender_uplift,
+            "deploy_rate": base.deploy_rate,
+            "guardrail_deterrence": base.guardrail_deterrence,
+            "guardrail_friction": base.guardrail_friction,
+            "irreversibility_guarded": base.irreversibility_guarded,
+            "controlled_tail_cost": base.controlled_tail_cost,
+            "prerelease_delay_cost": base.prerelease_delay_cost,
+            "open_benefit_scale": 1.0,
+            "minimal_irreversibility_extra": (
+                base.irreversibility_minimal - base.irreversibility_guarded
+            ),
+        }
+        mapped = scan_calibration(base, point)
+        for name in ("lambda_adversary", "adversary_uplift", "benefit_prerelease",
+                     "benefit_open_guarded", "benefit_open_minimal",
+                     "irreversibility_minimal"):
+            self.assertAlmostEqual(getattr(mapped, name), getattr(base, name))
+
+    def test_zero_benefit_scale_removes_every_benefit_premium(self):
+        point = dict(scan_point(7), open_benefit_scale=0.0)
+        c = scan_calibration(Calibration(), point)
+        for name in ("benefit_prerelease", "benefit_open_guarded", "benefit_open_minimal"):
+            self.assertAlmostEqual(getattr(c, name), c.benefit_controlled)
+
+    def test_scan_points_stay_inside_the_named_box(self):
+        for box, bounds in ROBUSTNESS_BOXES.items():
+            for sample_id in (1, 17, 500):
+                point = scan_point(sample_id, box)
+                for key, (low, high) in bounds.items():
+                    self.assertTrue(low <= point[key] <= high)
 
     def test_robustness_summary_shares_sum_to_one(self):
         summary = summarize_robustness(robustness_scan(Calibration(), samples=32))

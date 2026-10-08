@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asymmetric-proliferation"
-version = "0.1.0"
-description = "Release-policy model under asymmetric AI capability diffusion"
+version = "0.2.0"
+description = "Model of AI release policy with asymmetric capability diffusion"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = {text = "MIT"}
-dependencies = ["reportlab==4.4.9"]
+dependencies = ["matplotlib>=3.8", "numpy>=1.26"]
 
 [tool.setuptools.packages.find]
 include = ["asymprolif*"]
